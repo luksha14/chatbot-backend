@@ -1,14 +1,28 @@
-const express = require("express");
-const cors = require("cors");
-const mongoose = require("mongoose");
-const dotenv = require("dotenv");
-const chatRoutes = require("./routes/chatRoutes");
+import express from "express";
+import cors from "cors";
+import mongoose from "mongoose";
+import dotenv from "dotenv";
+import chatRoutes from "./routes/chatRoutes.js";
 
 dotenv.config();
 
 const app = express();
 
-app.use(cors());
+const allowedOrigins = [
+    'http://localhost:3000',      
+    'http://127.0.0.1:3000'      
+];
+
+app.use(cors({
+    origin: function (origin, callback) {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'), false);
+        }
+    }
+}));
+
 app.use(express.json());
 
 // MongoDB connection
