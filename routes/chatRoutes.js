@@ -1,6 +1,6 @@
-const express = require("express");
+import express from "express";
 const router = express.Router();
-const QAPair = require("../models/QApair");
+import QAPair from "../models/QApair.js";
 
 // Chat endpoint
 router.post("/", async (req, res) => {
@@ -41,4 +41,4 @@ router.post("/learn", async (req, res) => {
     }
 });
 
-module.exports = router;
+export default router;
