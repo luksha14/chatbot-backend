@@ -1,59 +1,55 @@
 import express from "express";
 const router = express.Router();
 import QAPair from "../models/QApair.js";
+import stringSimilarity from "string-similarity"; // For typo tolerance (Levenshtein)
+
+// Minimal similarity threshold (0.0 to 1.0)
+const SIMILARITY_THRESHOLD = 0.6; 
 
 // MAIN CHAT ENDPOINT
 router.post("/", async (req, res) => {
     const userMessage = req.body.message?.toLowerCase().trim();
-
-    console.log(`[DEBUG] Primljena poruka: ${userMessage}`);
+    const regexQuery = new RegExp(userMessage, 'i');
 
     try {
-        // 1) EXACT MATCH
-        const exactMatch = await QAPair.findOne({
-            question: userMessage
+        // I. PRIMARY SEARCH: Fast MongoDB query ($or)
+        const directMatch = await QAPair.findOne({
+            $or: [
+                { question: userMessage }, 
+                { synonyms: regexQuery },
+                { question: regexQuery } 
+            ]
         });
 
-        console.log(`[DEBUG] Exact match:`, exactMatch ? exactMatch.answer : "Nema");
-
-        if (exactMatch) {
-            return res.json({ reply: exactMatch.answer });
+        if (directMatch) {
+            return res.json({ reply: directMatch.answer });
         }
-
-        // 2) SYNONYM / PARTIAL MATCH
+        
+        // II. SECONDARY SEARCH: Levenshtein distance for typos (only if the fast query fails)
         const allPairs = await QAPair.find();
+        
+        // Create a list of all possible search phrases (questions + synonyms)
+        const allTargets = allPairs.flatMap(qa => [
+            qa.question, 
+            ...(qa.synonyms || [])
+        ]).map(s => s.toLowerCase());
 
-        let bestMatch = null;
+        const matches = stringSimilarity.findBestMatch(userMessage, allTargets);
+        const bestMatch = matches.bestMatch;
 
-        for (const qa of allPairs) {
-            const questionLower = qa.question.toLowerCase();
-
-            // direct contains match
-            if (userMessage.includes(questionLower)) {
-                bestMatch = qa;
-                break;
+        if (bestMatch.rating >= SIMILARITY_THRESHOLD) {
+            // Find the original QA object based on the best matching phrase
+            const originalQA = allPairs.find(qa => 
+                qa.question.toLowerCase() === bestMatch.target || 
+                (qa.synonyms && qa.synonyms.map(s => s.toLowerCase()).includes(bestMatch.target))
+            );
+            
+            if (originalQA) {
+                return res.json({ reply: originalQA.answer });
             }
-
-            // synonyms match
-            if (qa.synonyms && Array.isArray(qa.synonyms)) {
-                for (const syn of qa.synonyms) {
-                    if (userMessage.includes(syn.toLowerCase())) {
-                        bestMatch = qa;
-                        break;
-                    }
-                }
-            }
-
-            if (bestMatch) break;
         }
-
-        console.log(`[DEBUG] Synonym/partial match:`, bestMatch ? bestMatch.answer : "Nema");
-
-        if (bestMatch) {
-            return res.json({ reply: bestMatch.answer });
-        }
-
-        // 3) FALLBACK
+        
+        // III. FALLBACK
         return res.json({
             reply: "I'm not sure how to answer that yet, but Luka is teaching me more! 😊"
         });
@@ -64,7 +60,8 @@ router.post("/", async (req, res) => {
     }
 });
 
-// ADD NEW Q&A
+
+// ADD NEW Q&A ENDPOINT
 router.post("/learn", async (req, res) => {
     const { question, answer, synonyms } = req.body;
 
