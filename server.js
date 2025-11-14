@@ -1,8 +1,8 @@
-const express = require("express");
-const cors = require("cors");
-const mongoose = require("mongoose");
-const dotenv = require("dotenv");
-const chatRoutes = require("./routes/chatRoutes");
+import express from "express";
+import cors from "cors";
+import mongoose from "mongoose";
+import dotenv from "dotenv";
+import chatRoutes from "./routes/chatRoutes.js";
 
 dotenv.config();
 
